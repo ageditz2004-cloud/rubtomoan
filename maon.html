@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rub to Play Sound</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at top, #f9a8d4, #be185d);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #4a044e;
+      padding: 1rem;
+    }
+
+    .wrapper {
+      width: 100%;
+      max-width: 480px;
+      background: rgba(255, 240, 245, 0.95);
+      border-radius: 1.75rem;
+      padding: 1.75rem 1.5rem 1.9rem;
+      box-shadow: 0 18px 45px rgba(190, 24, 93, 0.45);
+      text-align: center;
+      backdrop-filter: blur(10px);
+    }
+
+    h1 {
+      margin-bottom: 0.5rem;
+      font-size: 1.8rem;
+      font-weight: 700;
+    }
+
+    p {
+      margin-bottom: 1.2rem;
+      font-size: 0.95rem;
+      opacity: 0.85;
+    }
+
+    #sound-area {
+      width: 100%;
+      height: min(60vh, 320px);
+      border-radius: 1.5rem;
+      border: 2px dashed #ec4899;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      padding: 1rem;
+      background: linear-gradient(135deg, #fdf2f8, #ffe4ef);
+      user-select: none;
+      touch-action: none; /* allow rubbing on mobile without scroll */
+      transition:
+        box-shadow 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.1s ease,
+        background 0.2s ease;
+      box-shadow: 0 8px 18px rgba(236, 72, 153, 0.25);
+    }
+
+    #sound-area.active {
+      box-shadow: 0 0 32px rgba(236, 72, 153, 0.9);
+      border-color: #db2777;
+      background: radial-gradient(circle at center, #fce7f3, #f9a8d4);
+      transform: scale(1.02);
+    }
+
+    .hint {
+      margin-top: 0.75rem;
+      font-size: 0.8rem;
+      opacity: 0.7;
+    }
+
+    code {
+      background: rgba(252, 231, 243, 0.9);
+      padding: 0.15rem 0.35rem;
+      border-radius: 0.4rem;
+      font-size: 0.78rem;
+    }
+
+    /* Small screens */
+    @media (max-width: 480px) {
+      .wrapper {
+        padding: 1.5rem 1.25rem 1.7rem;
+        border-radius: 1.5rem;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+      }
+
+      p {
+        font-size: 0.9rem;
+      }
+
+      #sound-area {
+        height: 260px;
+        font-size: 0.95rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <h1>Rub to Play Sound</h1>
+    <p>Your fingers gonna control the moan of girl in backend. Rub harder and make her feel good.</p>
+    <div id="sound-area">Rub here 💗</div>
+    <div class="hint">Make sure your browser allows sound.</div>
+  </div>
+
+  <!-- Your audio file -->
+  <audio id="moan-audio" src="moan.mp3" preload="auto"></audio>
+
+  <script>
+    const area = document.getElementById("sound-area");
+    const audioEl = document.getElementById("moan-audio");
+
+    let audioCtx = null;
+    let sourceNode = null;
+    let gainNode = null;
+
+    let activePointerId = null;
+    let lastX = null;
+    let lastY = null;
+    let lastTime = null;
+
+    function initAudioGraph() {
+      if (audioCtx) return;
+
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      sourceNode = audioCtx.createMediaElementSource(audioEl);
+      gainNode = audioCtx.createGain();
+
+      sourceNode.connect(gainNode).connect(audioCtx.destination);
+      gainNode.gain.value = 0; // start muted
+    }
+
+    async function startSound() {
+      initAudioGraph();
+
+      if (audioCtx.state === "suspended") {
+        await audioCtx.resume();
+      }
+
+      audioEl.loop = true;
+      if (audioEl.paused) {
+        audioEl.currentTime = 0;
+        try {
+          await audioEl.play();
+        } catch (err) {
+          console.error("Playback failed:", err);
+        }
+      }
+    }
+
+    function stopSound() {
+      if (!audioCtx) return;
+      gainNode.gain.value = 0;
+      audioEl.pause();
+      audioEl.currentTime = 0;
+    }
+
+    function onPointerDown(e) {
+      e.preventDefault();
+      activePointerId = e.pointerId;
+      area.setPointerCapture(e.pointerId);
+      area.classList.add("active");
+
+      lastX = e.clientX;
+      lastY = e.clientY;
+      lastTime = performance.now();
+
+      startSound();
+    }
+
+    function onPointerMove(e) {
+      if (!audioCtx) return;
+      if (e.pointerId !== activePointerId) return;
+
+      const now = performance.now();
+      const dx = e.clientX - lastX;
+      const dy = e.clientY - lastY;
+      const dt = (now - lastTime) / 1000;
+
+      lastX = e.clientX;
+      lastY = e.clientY;
+      lastTime = now;
+
+      if (dt <= 0) return;
+
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const speed = distance / dt;
+
+      const normalized = Math.min(speed / 800, 1);
+
+      const volume = normalized;
+      gainNode.gain.value = volume;
+
+      const minRate = 0.7;
+      const maxRate = 2.0;
+      const rate = minRate + normalized * (maxRate - minRate);
+      audioEl.playbackRate = rate;
+    }
+
+    function stopInteraction(e) {
+      if (e.pointerId !== activePointerId) return;
+
+      activePointerId = null;
+      area.classList.remove("active");
+
+      lastX = null;
+      lastY = null;
+      lastTime = null;
+
+      stopSound();
+    }
+
+    area.addEventListener("pointerdown", onPointerDown);
+    area.addEventListener("pointermove", onPointerMove);
+    area.addEventListener("pointerup", stopInteraction);
+    area.addEventListener("pointercancel", stopInteraction);
+    area.addEventListener("pointerleave", stopInteraction);
+  </script>
+</body>
+</html>
